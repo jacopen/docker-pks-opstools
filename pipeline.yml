@@ -1,0 +1,59 @@
+resource_types:
+- name: pivnet
+  type: docker-image
+  source:
+    repository: pivotalcf/pivnet-resource
+    tag: latest-final
+resources:
+- name: pivnet
+  type: pivnet
+  source:
+    api_token: ((pivnet_token))
+    product_slug: pivotal-container-service
+    product_version: ((pks-version))
+    sort_by: semver
+- name: app
+  type: git
+  source:
+    uri: "https://github.com/jacopen/docker-pks-opstools.git"
+- name: container-image
+  type: docker-image
+  source:
+    repository: jacopen/docker-pks-opstools
+    username: ((registry_user))
+    password: ((registry_password))
+jobs:
+- name: build-image
+  plan:
+  - get: app
+    trigger: true
+  - get: pks
+    resource: pivnet
+    trigger: true
+    params:
+      globs:
+      - pks-linux-amd64-*
+  - task: move pks
+    config:
+      platform: linux
+      image_resource:
+        type: docker-image
+        source:
+          repository: alpine
+      inputs:
+        - name: app
+        - name: pks
+      outputs:
+        - name: root
+      run:
+        path: sh
+        args:
+        - -c
+        - |
+          mv pks/pks-* root/pks
+          cp -r app/. root/
+  - put: container-image
+    params:
+      build: root
+      tag_file: root/.git/refs/heads/master
+      tag_as_latest: true
